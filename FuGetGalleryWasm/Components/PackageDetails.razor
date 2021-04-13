@@ -1,0 +1,379 @@
+﻿@using FuGetGallery
+@using FuGetGallery.Components
+@inject HttpClient httpClient
+
+<PackageHeader Context=@routing diff=@diff dependents=@dependents />
+
+@if (diff != null)
+{
+    <DiffDetails Diff=@diff />
+}
+else if (framework != null && package != null)
+{
+
+    <div id="api" class="row" style="margin-bottom:4em;">
+        <div class="col-xs-12 col-sm-3 sidenav">
+            @if (hasApi)
+            {
+                <h3 style="color:#777;margin-top:0em;margin-bottom:0em">.NET API <small style="color:#777;">@framework.SizeInBytes.ToString("#,0") bytes</small></h3>
+
+            }
+            else
+            {
+                <h3 style="color:#777;margin-top:0em;margin-bottom:0em">Package Files</h3>
+                <small style="color:#777;">@((package.Content.Sum(x=>x.SizeInBytes)+package.Tools.Sum(x=>x.SizeInBytes)).ToString("#,0")) bytes</small>
+            }
+
+            <form class="form-inline" style="margin-top: 0.5em;">
+                <input id="asearch" type="search" class="form-control" placeholder="Search"
+                       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                       style="margin-bottom:1em;" />
+            </form>
+
+            <nav id="anav">
+
+                @if (framework != null && framework.Assemblies.Count > 0)
+                {
+                    <h4>Assemblies</h4>
+                    <ul class="pkglist">
+                        @foreach (var a in framework.Assemblies.OrderBy(x => x.FileName))
+                        {
+                            var active = !isBuildAsm && a.FileName == asm?.FileName;
+                            var cls = (active ? "active " : "") + "public-api";
+                            <li>
+                                <a class="@cls"
+                                   href="/packages/@Uri.EscapeDataString(package.Id)/@Uri.EscapeDataString(package.Version.ShortVersionString)/lib/@Uri.EscapeDataString(framework.Moniker)/@Uri.EscapeDataString(a.FileName)"
+                                   title="@a.Definition.Name.Version.ToString()">
+                                    <span class="glyphicon glyphicon-@Icon.ForObject(a)" aria-hidden="true"></span>&nbsp;@a.FileName
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+                @if (framework != null && framework.BuildAssemblies.Count > 0)
+                {
+                    <h4>Build Assemblies</h4>
+                    <ul class="pkglist">
+                        @foreach (var a in framework.BuildAssemblies.OrderBy(x => x.FileName))
+                        {
+                            var active = isBuildAsm && a.FileName == asm?.FileName;
+                            var cls = (active ? "active " : "") + "public-api";
+                            <li>
+                                <a class="@cls"
+                                   href="/packages/@Uri.EscapeDataString(package.Id)/@Uri.EscapeDataString(package.Version.ShortVersionString)/build/@Uri.EscapeDataString(framework.Moniker)/@Uri.EscapeDataString(a.FileName)">
+                                    <span class="glyphicon glyphicon-@Icon.ForObject(a)" aria-hidden="true"></span>&nbsp;@a.FileName
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+                @if (asmDef != null && namespaces != null && namespaces.Count > 0)
+                {
+                    <h4>Namespaces</h4>
+                    <ul class="pkglist">
+                        @foreach (var n in namespaces)
+                        {
+                            var isPublic = n.Any(x => x.IsPublic);
+                            var active = n.Key == ns?.Key;
+                            var cls = (active ? "active " : "") + (isPublic ? "public-api" : "private-api");
+                            if (isPublic || package.AllowedToDecompile)
+                            {
+                                <li>
+                                    <a class="@cls"
+                                       href="/packages/@Uri.EscapeDataString(package.Id)/@Uri.EscapeDataString(package.Version.ShortVersionString)/@Uri.EscapeDataString(dir)/@Uri.EscapeDataString(framework.Moniker)/@Uri.EscapeDataString(asm.FileName)/@Uri.EscapeDataString(n.Key)">
+                                        <span class="glyphicon glyphicon-@Icon.ForObject(n)" aria-hidden="true"></span>&nbsp;@n.Key
+                                    </a>
+                                </li>
+                            }
+                        }
+                    </ul>
+                }
+                @if (ns != null)
+                {
+                    <h4 id="types">Types</h4>
+                    <ul class="long-item-list">
+                        @foreach (var t in ns.OrderBy(x => x.Name))
+                        {
+                            var active = t.Name == typ?.Name;
+                            var cls = (active ? "active " : "") + (t.IsPublic ? "public-api" : "private-api");
+                            if (t.IsPublic || package.AllowedToDecompile)
+                            {
+                                <li>
+                                    <a class="@cls"
+                                       href="@routing.GetUrl(otypeName:t.Name)">
+                                        <span class="glyphicon glyphicon-@Icon.ForObject(t)" aria-hidden="true"></span>&nbsp;@t.GetFriendlyName()
+                                    </a>
+                                </li>
+                            }
+                        }
+                    </ul>
+                }
+                @if (package != null && package.Content.Count > 0)
+                {
+                    <h4>Content</h4>
+                    <ul class="pkglist">
+                        @foreach (var a in package.Content.OrderBy(x => x.FileName))
+                        {
+                            var bold = a.FileName == content?.FileName ? "bold" : "normal";
+                            var color = bold == "bold" ? "#000" : "#777";
+                            <li>
+                                <a style="font-weight:@bold;color:@color;"
+                                   href="/packages/@Uri.EscapeDataString(package.Id)/@Uri.EscapeDataString(package.Version.ShortVersionString)/content/@a.ArchiveEntry.FullName.Substring(8)">
+                                    <span class="glyphicon glyphicon-@Icon.ForObject(a)" aria-hidden="true"></span>&nbsp;@a.ArchiveEntry.FullName.Substring(8)
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+                @if (package != null && package.Tools.Count > 0)
+                {
+                    <h4>Tools</h4>
+                    <ul class="pkglist">
+                        @foreach (var a in package.Tools.OrderBy(x => x.FileName))
+                        {
+                            var bold = a.FileName == content?.FileName ? "bold" : "normal";
+                            var color = bold == "bold" ? "#000" : "#777";
+                            <li>
+                                <a style="font-weight:@bold;color:@color;"
+                                   href="/packages/@Uri.EscapeDataString(package.Id)/@Uri.EscapeDataString(package.Version.ShortVersionString)/tools/@a.ArchiveEntry.FullName.Substring(6)">
+                                    <span class="glyphicon glyphicon-@Icon.ForObject(a)" aria-hidden="true"></span>&nbsp;@a.ArchiveEntry.FullName.Substring(6)
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+            </nav>
+        </div>
+        <div class="col-xs-12 col-sm-9" id="code">
+            <article>
+                @if (showKlass == "type")
+                {
+                    <h1 id="type" style="margin-top:0"><span class="glyphicon glyphicon-@Icon.ForObject(typ)" aria-hidden="true"></span>&nbsp;@typ.GetFriendlyName()</h1>
+                    <div class="member-code" style="font-size:120%">
+                        @(new MarkupString (typ.GetPrototypeHtml(framework: framework, docs?.MemberXmlDocs, linkToCode: false, inExtensionClass: false)))
+                    </div>
+                    <div class="description-section">
+                        @if (docs != null)
+                        {@(new MarkupString (docs.SummaryHtml))}
+                        else
+                        {@description}
+                    </div>
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li role="presentation" class="@(!code?"active":"")"><a href="@routing.GetUrl(ocode:false)" aria-controls="documentation" role="tab">Documentation</a></li>
+                        @if (package.AllowedToDecompile)
+                        {
+                            <li role="presentation" class="@(code?"active":"")"><a href="@routing.GetUrl(ocode:true)" aria-controls="code" role="tab">Code</a></li>
+                        }
+                    </ul>
+                    if (docs != null)
+                    {
+                        @(new MarkupString (docsHtml))
+                    }
+                }
+                else if (showKlass == "namespace")
+                {
+                    <h1 id="namespace" style="margin-top:0"><span class="glyphicon glyphicon-@Icon.ForObject(ns)" aria-hidden="true"></span>&nbsp;@ns.Key</h1>
+                    <p class="description-section">@description</p>
+                }
+                else if (showKlass == "assembly")
+                {
+                    <h1 id="assembly" style="margin-top:0"><span class="glyphicon glyphicon-@Icon.ForObject(asm)" aria-hidden="true"></span>&nbsp;@asm.FileName <small>@asmDef.Name.Version</small></h1>
+                    <p class="description-section">@description</p>
+                }
+                else
+                {
+                    <h1 id="package" style="margin-top:0"><span class="glyphicon glyphicon-@Icon.ForObject(package)" aria-hidden="true"></span>&nbsp;@package.Id <small>@package.Version</small></h1>
+                    <p class="description-section">@description</p>
+                    <pre><code>@package.NuspecXml</code></pre>
+                }
+            </article>
+        </div>
+    </div>
+}
+
+@code {
+
+    @*ViewData["Title"] = title;
+
+            ViewData["meta"] = new Dictionary<string, string> {
+            { "twitter:card", "summary" },
+            { "og:url", Request.GetEncodedUrl()
+            },
+            { "og:title", title
+        },
+            { "og:description", description },
+            { "og:image", package.SafeIconUrl },*@
+
+PackageData package;
+string authors;
+PackageVersions versions;
+PackageVersion versionSpec;
+PackageTargetFramework framework;
+bool hasApi;
+ApiDiff diff;
+string showKlass;
+IGrouping<string, Mono.Cecil.TypeDefinition> ns;
+List<IGrouping<string, Mono.Cecil.TypeDefinition>> namespaces;
+Mono.Cecil.AssemblyDefinition asmDef;
+Mono.Cecil.TypeDefinition typ;
+string description;
+PackageFile content;
+TypeDocumentation docs;
+bool code;
+string nupkgName;
+PackageAssembly asm;
+bool isBuildAsm;
+bool autodir;
+string dir;
+List<string> dependents;
+string docsHtml;
+
+
+
+[Parameter]
+public string PackageId { get; set; } = "";
+[Parameter]
+public string PackageVersion { get; set; } = "";
+[Parameter]
+public string TargetFramework { get; set; } = "";
+[Parameter]
+public string Directory { get; set; } = "";
+[Parameter]
+public string AssemblyName { get; set; } = "";
+[Parameter]
+public string Namespace { get; set; } = "";
+[Parameter]
+public string TypeName { get; set; } = "";
+[Parameter]
+public bool ShowCode { get; set; }
+[Parameter]
+public string LanguageCode { get; set; } = "en";
+
+readonly System.Threading.CancellationTokenSource tokenSource = new System.Threading.CancellationTokenSource();
+
+readonly PackageContext routing = new PackageContext();
+
+protected override async Task OnInitializedAsync()
+{
+    Console.WriteLine ("HELLO I'M INITING");
+    routing.PackageId = PackageId;
+    routing.PackageVersion = PackageVersion;
+    routing.TargetFramework = TargetFramework;
+    routing.Directory = Directory;
+    routing.AssemblyName = AssemblyName;
+    routing.Namespace = Namespace;
+    routing.TypeName = TypeName;
+    routing.ShowCode = ShowCode;
+
+    package = await PackageData.GetAsync(PackageId, PackageVersion, httpClient);
+    routing.package = package;
+    Console.WriteLine("PACKAGE = " + package);
+    versions = await PackageVersions.GetAsync(PackageId, httpClient, tokenSource.Token);
+    routing.versions = versions;
+    versionSpec = package.Version;
+    routing.versionSpec = versionSpec;
+    Console.WriteLine("READY FOR MORE");
+
+    dependents = (await PackageDependents.GetAsync(PackageId, httpClient, tokenSource.Token)).DependentIds;
+
+    string inputTargetFramework = (TargetFramework ?? "").ToString().Trim();
+    framework = package.FindClosestTargetFramework(inputTargetFramework);
+    routing.framework = framework;
+
+    content = default(PackageFile);
+    string inputAssemblyName = (AssemblyName ?? "").ToString().Trim();
+    string inputNamespace = (Namespace ?? "").ToString().Trim();
+    isBuildAsm = "build".Equals(Directory);
+    autodir = string.IsNullOrEmpty(Directory);
+    routing.autodir = autodir;
+    dir = isBuildAsm ? "build" : "lib";
+    routing.dir = dir;
+
+    diff = default(ApiDiff);
+    asm = default(PackageAssembly);
+
+    if (inputAssemblyName == "diff")
+    {
+        diff = await ApiDiff.GetAsync(package.Id, package.Version.ShortVersionString, framework.Moniker, inputNamespace, httpClient, tokenSource.Token);
+    }
+    else
+    {
+        asm = framework?.GetAssembly(dir, inputAssemblyName);
+    }
+    routing.asm = asm;
+    asmDef = asm?.Definition;
+    Console.WriteLine("ASSEMBLY LOADED " + asmDef);
+    var types = asmDef != null ? (IEnumerable<Mono.Cecil.TypeDefinition>)asmDef.MainModule.Types : new Mono.Cecil.TypeDefinition[0];
+
+    namespaces = types.GroupBy(x => x.Namespace).OrderBy(x => x.Key).Where(x => !string.IsNullOrEmpty(x.Key)).ToList();
+
+    ns = namespaces.FirstOrDefault(x => x.Key == inputNamespace);
+    var autons = autodir;
+    if (ns == null)
+    {
+        autons = true;
+        var publicNamespaces = namespaces.Where(n => n.Any(x => x.IsPublic)).OrderBy(n => n.Key.Length);
+        ns = publicNamespaces.FirstOrDefault();
+        if (ns == null && package.AllowedToDecompile)
+        {
+            ns = namespaces.FirstOrDefault();
+        }
+    }
+    routing.ns = ns;
+
+    string inputTypeName = (TypeName ?? "").ToString().Trim();
+
+    typ = ns?.FirstOrDefault(x => x.Name == inputTypeName);
+    docs = typ != null ? asm?.GetTypeDocumentation(typ, LanguageCode) : null;
+
+    code = ShowCode && package.AllowedToDecompile;
+
+    hasApi = framework != null;
+    var hasContent = package != null && package.Content.Count > 0;
+    var hasTools = package != null && package.Tools.Count > 0;
+    var hasFiles = hasContent || hasTools;
+
+    nupkgName = package.Id + "." + package.Version + ".nupkg";
+    routing.nupkgName = nupkgName;
+
+    showKlass = "package";
+    var title = typ != null ? typ.GetFriendlyFullName() : package.Id + " " + package.Version;
+    description = package.Description;
+
+    if (typ != null && !autons && typ.Name.Equals(inputTypeName, StringComparison.InvariantCultureIgnoreCase))
+    {
+        showKlass = "type";
+        title = typ.GetFriendlyFullName();
+        description = $"Type with {typ.Fields.Count} fields and {typ.Methods.Count} methods";
+        if (docs != null && !string.IsNullOrEmpty(docs.SummaryText))
+        {
+            description += "\n\n" + docs.SummaryText;
+        }
+    }
+    else if (ns != null && !autons)
+    {
+        showKlass = "namespace";
+        title = ns.Key;
+        description = $"Namespace with {ns.Count():#,0} types";
+    }
+    else if (asmDef != null && !autons && asm.FileName.Equals(inputAssemblyName, StringComparison.InvariantCultureIgnoreCase))
+    {
+        showKlass = "assembly";
+        title = asm.FileName ?? asmDef.Name.Name;
+        description = $"Assembly with {types.Count():#,0} types ({asm.SizeInBytes:#,0} bytes)";
+    }
+
+
+
+    if (docs != null)
+        docsHtml = (code) ?
+            await docs.GetTypeCodeAsync() :
+            docs.DocumentationHtml;
+}
+
+
+
+
+
+
+}

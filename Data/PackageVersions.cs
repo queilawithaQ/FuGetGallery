@@ -28,7 +28,7 @@ namespace FuGetGallery
             var version = (inputVersion ?? "").ToString().Trim().ToLowerInvariant();
             var v = Versions.FirstOrDefault (x => x.ShortVersionString == version);
             if (v == null) {
-                v = Versions.LastOrDefault (x => !x.IsPreRelease);
+                v = Versions.LastOrDefault (x => !x.IsPreRelease) ?? Versions.LastOrDefault ();
             }
             if (v == null) {
                 v = new PackageVersion {
@@ -41,11 +41,15 @@ namespace FuGetGallery
         void Read (JArray items)
         {
             foreach (var v in items) {
+                var listed = v["catalogEntry"]?["listed"] ?? true;
+                if (!(bool)listed) continue;
+
                 DateTime? time = null;
                 var times = v["catalogEntry"]?["published"];
                 if (times != null) {
                     time = (DateTime)times;
                 }
+
                 var version = v["version"]?.ToString();
                 if (version == null) {
                     version = v["catalogEntry"]?["version"]?.ToString();
